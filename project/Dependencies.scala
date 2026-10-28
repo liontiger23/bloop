@@ -17,7 +17,9 @@ object Dependencies {
   // Keep in sync in BloopComponentCompiler
   val zincVersion = "1.12.1"
 
-  val bspVersion = "2.1.1"
+  // TEMP (metals #404 local testing): locally published bsp4s (v2.1.1 + workingDirectory field).
+  // Resolved from ~/.ivy2/local. Revert to "2.1.1" once a real BSP release lands.
+  val bspVersion = "2.1.1-cwd-SNAPSHOT"
 
   val scalazVersion = "7.3.9"
   val lmVersion = "1.12.3"

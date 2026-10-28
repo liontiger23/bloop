@@ -58,6 +58,7 @@ abstract class BloopDebuggee(
 private final class MainClassDebugAdapter(
     project: Project,
     mainClass: ScalaMainClass,
+    workingDirectory: Option[AbsolutePath],
     val modules: Seq[Module],
     val libraries: Seq[Library],
     val unmanagedEntries: Seq[UnmanagedEntry],
@@ -76,11 +77,14 @@ private final class MainClassDebugAdapter(
     // Metals used to add the `-J` prefix but it is not needed anymore
     // So we cautiously strip it off
     val jvmOptions = mainClass.jvmOptions.map(_.stripPrefix("-J"))
+    val cwd = workingDirectory.getOrElse(
+      project.workspaceDirectory.getOrElse(project.baseDirectory)
+    )
     val runState = Tasks.runJVM(
       state,
       project,
       env,
-      project.workspaceDirectory.getOrElse(project.baseDirectory),
+      cwd,
       mainClass.className,
       mainClass.arguments.toArray,
       jvmOptions.toArray,
@@ -155,9 +159,21 @@ private final class AttachRemoteDebugAdapter(
 }
 
 object BloopDebuggeeRunner {
+  /** Validates and converts a BSP `workingDirectory` URI to an absolute path. */
+  def validateWorkingDirectory(path: java.nio.file.Path): Either[String, AbsolutePath] = {
+    try {
+      val absolute = AbsolutePath(path.toAbsolutePath)
+      if (java.nio.file.Files.isDirectory(absolute.underlying)) Right(absolute)
+      else Left(s"Working directory is not a directory: $path")
+    } catch {
+      case e: Exception => Left(s"Invalid working directory: $path (${e.getMessage})")
+    }
+  }
+
   def forMainClass(
       projects: Seq[Project],
       mainClass: ScalaMainClass,
+      workingDirectory: Option[AbsolutePath],
       state: State,
       ioScheduler: Scheduler
   ): Either[String, Debuggee] = {
@@ -172,6 +188,7 @@ object BloopDebuggeeRunner {
               new MainClassDebugAdapter(
                 project,
                 mainClass,
+                workingDirectory,
                 modules,
                 libraries,
                 unmanagedEntries,

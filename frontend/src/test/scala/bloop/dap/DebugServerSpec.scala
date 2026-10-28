@@ -1168,6 +1168,7 @@ object DebugServerSpec extends DebugBspBaseSuite {
     BloopDebuggeeRunner.forMainClass(
       Seq(testState.getProjectFor(project)),
       new ScalaMainClass("Main", arguments, jvmOptions, Some(environmentVariables)),
+      None,
       testState.state,
       defaultScheduler
     ) match {

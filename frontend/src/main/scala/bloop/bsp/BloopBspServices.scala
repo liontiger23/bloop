@@ -755,10 +755,21 @@ final class BloopBspServices(
 
       }
 
+      val workingDirectory: Option[AbsolutePath] = params.workingDirectory match {
+        case Some(uri) =>
+          BloopDebuggeeRunner.validateWorkingDirectory(uri.toPath) match {
+            case Right(path) => Some(path)
+            case Left(error) =>
+              state.logger.error(error)
+              None
+          }
+        case None => None
+      }
+
       params.dataKind match {
         case Some(bsp.DebugSessionParamsDataKind.ScalaMainClass) =>
           convert[bsp.ScalaMainClass](main =>
-            BloopDebuggeeRunner.forMainClass(projects, main, state, ioScheduler)
+            BloopDebuggeeRunner.forMainClass(projects, main, workingDirectory, state, ioScheduler)
           )
         case Some(bsp.TestParamsDataKind.ScalaTestSuites) =>
           implicit val codec = JsonCodecMaker.make[List[String]]
