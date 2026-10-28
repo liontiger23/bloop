@@ -755,10 +755,27 @@ final class BloopBspServices(
 
       }
 
+      def workingDirectory: Option[AbsolutePath] =
+        params.workingDirectory match {
+          case Some(uri) =>
+            val path = uri.toPath
+            Try(AbsolutePath(path.toAbsolutePath)).toEither match {
+              case Right(absolute) if java.nio.file.Files.isDirectory(absolute.underlying) =>
+                Some(absolute)
+              case Right(_) =>
+                state.logger.error(s"Working directory is not a directory: $path")
+                None
+              case Left(error) =>
+                state.logger.error(s"Invalid working directory: $path (${error.getMessage})")
+                None
+            }
+          case None => None
+        }
+
       params.dataKind match {
         case Some(bsp.DebugSessionParamsDataKind.ScalaMainClass) =>
           convert[bsp.ScalaMainClass](main =>
-            BloopDebuggeeRunner.forMainClass(projects, main, state, ioScheduler)
+            BloopDebuggeeRunner.forMainClass(projects, main, workingDirectory, state, ioScheduler)
           )
         case Some(bsp.TestParamsDataKind.ScalaTestSuites) =>
           implicit val codec = JsonCodecMaker.make[List[String]]

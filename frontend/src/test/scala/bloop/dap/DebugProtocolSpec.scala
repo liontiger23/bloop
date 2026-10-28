@@ -15,6 +15,51 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import jsonrpc4s.RawJson
 
 object DebugProtocolSpec extends DebugBspBaseSuite {
+  test("runs the program in the requested working directory") {
+    TestUtil.withinWorkspace { workspace =>
+      val main =
+        """|/main/scala/Main.scala
+           |object Main {
+           |  def main(args: Array[String]): Unit = {
+           |    val marker = new java.io.File("marker.txt")
+           |    println(marker.exists())
+           |    println(marker.getAbsolutePath)
+           |  }
+           |}
+           |""".stripMargin
+
+      val logger = new RecordingLogger(ansiCodesSupported = false)
+      val project = TestProject(workspace, "p", List(main))
+
+      // Put the marker file in a directory that is neither the workspace nor
+      // the project directory and request it as working directory.
+      val cwd = workspace.resolve("elsewhere")
+      Files.createDirectories(cwd.underlying)
+      Files.createFile(cwd.resolve("marker.txt").underlying)
+
+      loadBspState(workspace, List(project), logger) { state =>
+        val params = mainClassParams(
+          "Main",
+          workingDirectory = Some(cwd.toBspUri.toString)
+        )
+        val output = state.withDebugSession(project, params) { client =>
+          for {
+            _ <- client.initialize()
+            _ <- client.launch(noDebug = true)
+            _ <- client.configurationDone()
+            _ <- client.exited
+            _ <- client.terminated
+            output <- client.blockForAllOutput
+          } yield output
+        }
+
+        val lines = output.linesIterator.toList
+        assert(lines.contains("true"))
+        assert(lines.exists(_.endsWith("/elsewhere/marker.txt")))
+      }
+    }
+  }
+
   test("starts a debug session") {
     TestUtil.withinWorkspace { workspace =>
       val main =
@@ -261,14 +306,16 @@ object DebugProtocolSpec extends DebugBspBaseSuite {
       mainClass: String,
       arguments: List[String] = Nil,
       jvmOptions: List[String] = Nil,
-      environmentVariables: Option[List[String]] = None
+      environmentVariables: Option[List[String]] = None,
+      workingDirectory: Option[String] = None
   ): bsp.BuildTargetIdentifier => bsp.DebugSessionParams = { target =>
     val data = bsp.ScalaMainClass(mainClass, arguments, jvmOptions, environmentVariables)
     val json = writeToArray[bsp.ScalaMainClass](data)
     bsp.DebugSessionParams(
       List(target),
       Some(bsp.DebugSessionParamsDataKind.ScalaMainClass),
-      Some(RawJson(json))
+      Some(RawJson(json)),
+      workingDirectory.map(bsp.Uri.apply)
     )
   }
 
@@ -281,7 +328,8 @@ object DebugProtocolSpec extends DebugBspBaseSuite {
     bsp.DebugSessionParams(
       targets,
       Some(bsp.TestParamsDataKind.ScalaTestSuites),
-      Some(RawJson(json))
+      Some(RawJson(json)),
+      None
     )
   }
 }

@@ -58,6 +58,7 @@ abstract class BloopDebuggee(
 private final class MainClassDebugAdapter(
     project: Project,
     mainClass: ScalaMainClass,
+    workingDirectory: Option[AbsolutePath],
     val modules: Seq[Module],
     val libraries: Seq[Library],
     val unmanagedEntries: Seq[UnmanagedEntry],
@@ -76,11 +77,14 @@ private final class MainClassDebugAdapter(
     // Metals used to add the `-J` prefix but it is not needed anymore
     // So we cautiously strip it off
     val jvmOptions = mainClass.jvmOptions.map(_.stripPrefix("-J"))
+    val cwd = workingDirectory.getOrElse(
+      project.workspaceDirectory.getOrElse(project.baseDirectory)
+    )
     val runState = Tasks.runJVM(
       state,
       project,
       env,
-      project.workspaceDirectory.getOrElse(project.baseDirectory),
+      cwd,
       mainClass.className,
       mainClass.arguments.toArray,
       jvmOptions.toArray,
@@ -158,6 +162,7 @@ object BloopDebuggeeRunner {
   def forMainClass(
       projects: Seq[Project],
       mainClass: ScalaMainClass,
+      workingDirectory: Option[AbsolutePath],
       state: State,
       ioScheduler: Scheduler
   ): Either[String, Debuggee] = {
@@ -172,6 +177,7 @@ object BloopDebuggeeRunner {
               new MainClassDebugAdapter(
                 project,
                 mainClass,
+                workingDirectory,
                 modules,
                 libraries,
                 unmanagedEntries,
