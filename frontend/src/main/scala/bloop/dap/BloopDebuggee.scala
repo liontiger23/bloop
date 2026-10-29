@@ -76,7 +76,16 @@ private final class MainClassDebugAdapter(
     // TODO: https://github.com/scalacenter/bloop/issues/1456
     // Metals used to add the `-J` prefix but it is not needed anymore
     // So we cautiously strip it off
-    val jvmOptions = mainClass.jvmOptions.map(_.stripPrefix("-J"))
+    val strippedJvmOptions = mainClass.jvmOptions.map(_.stripPrefix("-J"))
+    // sbt-bloop encodes the project's working directory as a `-Duser.dir` option in
+    // the bloop config. When an explicit working directory is requested, re-add the
+    // option after the config options so that the JVM's `user.dir` property matches
+    // the OS working directory (the JVM honours the last occurrence of a repeated
+    // option, e.g. -Duser.dir or -Xmx).
+    val jvmOptions = workingDirectory match {
+      case Some(workingDir) => strippedJvmOptions :+ s"-Duser.dir=${workingDir.syntax}"
+      case None => strippedJvmOptions
+    }
     val cwd = workingDirectory.getOrElse(
       project.workspaceDirectory.getOrElse(project.baseDirectory)
     )
@@ -159,6 +168,7 @@ private final class AttachRemoteDebugAdapter(
 }
 
 object BloopDebuggeeRunner {
+
   /** Validates and converts a BSP `workingDirectory` URI to an absolute path. */
   def validateWorkingDirectory(path: java.nio.file.Path): Either[String, AbsolutePath] = {
     try {

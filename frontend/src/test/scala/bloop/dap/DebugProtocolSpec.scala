@@ -24,12 +24,21 @@ object DebugProtocolSpec extends DebugBspBaseSuite {
            |    val marker = new java.io.File("marker.txt")
            |    println(marker.exists())
            |    println(marker.getAbsolutePath)
+           |    // The JVM `user.dir` property must match the OS working directory,
+           |    // even if the project config injects a bogus `-Duser.dir` option
+           |    // (as sbt-bloop does).
+           |    println(sys.props("user.dir"))
            |  }
            |}
            |""".stripMargin
 
       val logger = new RecordingLogger(ansiCodesSupported = false)
-      val project = TestProject(workspace, "p", List(main))
+      // Imitate sbt-bloop, which encodes the project working directory as a
+      // `-Duser.dir` JVM option in the bloop config.
+      val jvmConfig = Some(
+        bloop.config.Config.JvmConfig(None, List(s"-Duser.dir=${workspace.syntax}"))
+      )
+      val project = TestProject(workspace, "p", List(main), jvmConfig = jvmConfig)
 
       // Put the marker file in a directory that is neither the workspace nor
       // the project directory and request it as working directory.
@@ -56,6 +65,7 @@ object DebugProtocolSpec extends DebugBspBaseSuite {
         val lines = output.linesIterator.toList
         assert(lines.contains("true"))
         assert(lines.exists(_.endsWith("/elsewhere/marker.txt")))
+        assert(lines.contains(cwd.underlying.toAbsolutePath.toString), s"lines=$lines")
       }
     }
   }
