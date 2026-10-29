@@ -73,10 +73,16 @@ private final class MainClassDebugAdapter(
   val javaRuntime: Option[JavaRuntime] = JavaRuntime(env.javaHome.underlying)
   def name: String = s"${getClass.getSimpleName}(${project.name}, ${mainClass.className})"
   def start(state: State, listener: DebuggeeListener): Task[ExitStatus] = {
+    // sbt-bloop encodes the project's working directory as a `-Duser.dir` option in
+    // the bloop config. When an explicit working directory is requested, re-add the
+    // option after the config options so that the JVM's `user.dir` property matches
+    // the OS working directory (the JVM honours the last occurrence of a repeated
+    // option, e.g. -Duser.dir or -Xmx).
+    val userDir = workingDirectory.map(workingDir => s"-Duser.dir=${workingDir.syntax}")
     // TODO: https://github.com/scalacenter/bloop/issues/1456
     // Metals used to add the `-J` prefix but it is not needed anymore
     // So we cautiously strip it off
-    val jvmOptions = mainClass.jvmOptions.map(_.stripPrefix("-J"))
+    val jvmOptions = mainClass.jvmOptions.map(_.stripPrefix("-J")) ++ userDir
     val cwd = workingDirectory.getOrElse(
       project.workspaceDirectory.getOrElse(project.baseDirectory)
     )
